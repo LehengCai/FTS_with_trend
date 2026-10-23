@@ -377,8 +377,8 @@ Wu_fixed_x0 = function(Y,n,N,alpha=c(0.01,0.05,0.1,0.2),x_0,
     berror=bseq[order(GCV)[1]]
     bb=berror
   }else{
-    berror=B_error
-    bb=B_error
+    berror=round_up_2(n^(-1/6)) #0.15
+    bb=round_up_2(n^(-1/6)) 
   }
 
   
@@ -393,24 +393,73 @@ Wu_fixed_x0 = function(Y,n,N,alpha=c(0.01,0.05,0.1,0.2),x_0,
   Critical=HDtest((Matrix_SCB),m=mm,lit=boots, rep_time = NN)
   Q = quantile(Critical,1-alpha)
   
-  lattice_time = seq(1/n,1,1/n)
-  time_varying = lattice_time^2 
+  lattice_time = seq(1/n, 1, 1/n)
+  time_varying = lattice_time^2
   mean_function = function(v){
-    return(1.5* sin(3*pi*(v+ 0.5))+2*v^3)
+    return(1.5 * sin(3*pi*(v + 0.5)) + 2*v^3)
   }
-  m_real = mean_function(x0)+time_varying
   
-  max_dev=max(abs((Estimat_FDA - m_real)/Estimat_Lrv ))*sqrt(bb*n)/sqrt(2)
-  return(c(max_dev<quantile(Critical,1-alpha),
-           mean(Estimat_Lrv*sqrt(2)/sqrt(bb*n))*2*Q))
- 
-
-  plot(lattice_time,Estimat_FDA,'l',ylim=c(-3,4))
+  # 注意这里建议用函数参数 x_0，而不是全局变量 x0
+  m_real = mean_function(x_0) + time_varying
   
-  lines(lattice_time,Estimat_FDA,col='purple' )
-  lines(lattice_time,m_real,col='red')
-  lines(lattice_time,Estimat_FDA+Q[2]*Estimat_Lrv*sqrt(2)/sqrt(bb*n),col='blue')
-  lines(lattice_time,Estimat_FDA-Q[2]*Estimat_Lrv*sqrt(2)/sqrt(bb*n),col='blue')
+  
+  ############################################################
+  # Full-domain coverage over [0,1]
+  ############################################################
+  
+  max_dev_full =
+    max(abs((Estimat_FDA - m_real) / Estimat_Lrv)) *
+    sqrt(bb * n) / sqrt(2)
+  
+  coverage_full =
+    as.numeric(max_dev_full < Q)
+  
+  
+  ############################################################
+  # Interior coverage over [h,1-h], where h = bb
+  ############################################################
+  
+  h = bb
+  
+  interior_index = which(
+    lattice_time >= h &
+      lattice_time <= 1 - h
+  )
+  
+  max_dev_interior =
+    max(
+      abs(
+        (Estimat_FDA[interior_index] -
+           m_real[interior_index]) /
+          Estimat_Lrv[interior_index]
+      )
+    ) * sqrt(bb * n) / sqrt(2)
+  
+  coverage_interior =
+    as.numeric(max_dev_interior < Q)
+  
+  
+  ############################################################
+  # Average width over the full domain [0,1]
+  ############################################################
+  
+  average_width_full =
+    mean(
+      Estimat_Lrv * sqrt(2) / sqrt(bb * n)
+    ) * 2 * Q
+  
+  
+  ############################################################
+  # Return
+  ############################################################
+  
+  return(
+    c(
+      coverage_full,
+      coverage_interior,
+      average_width_full
+    )
+  )
   
 
 }

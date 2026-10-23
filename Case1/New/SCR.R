@@ -74,12 +74,112 @@ StaionarySCB = function(Y,n,N,alpha,J_T,J_N,p_T,p_N,N0 = 50){
   m_real = 1.5* sin(3*pi*(lattice.eval+ 0.5))+2*lattice.eval^3
   m.eval <- t(sapply(1:N0, function(j) m_real + time_varying[j,]))
   
-  flag = rep(0,length(alpha))
-  for(i in 1:length(alpha)){
-    flag[i] = as.numeric(all(m_hat.eval+Q[i]*matrix(diag_sd,N0,N0,T)/sqrt(n)>=m.eval)&&
-                        all(m_hat.eval-Q[i]*matrix(diag_sd,N0,N0,T)/sqrt(n)<=m.eval)) 
+  # flag = rep(0,length(alpha))
+  # for(i in 1:length(alpha)){
+  #   flag[i] = as.numeric(all(m_hat.eval+Q[i]*matrix(diag_sd,N0,N0,T)/sqrt(n)>=m.eval)&&
+  #                       all(m_hat.eval-Q[i]*matrix(diag_sd,N0,N0,T)/sqrt(n)<=m.eval)) 
+  # }
+  # return(flag)
+  
+  # flag = rep(0, length(alpha))
+  # volume = rep(0, length(alpha))
+  # sd_surface = matrix(diag_sd, N0, N0, byrow = TRUE)
+  # 
+  # for(i in 1:length(alpha)){
+  #   half_width = Q[i] * sd_surface / sqrt(n)
+  #   flag[i] = as.numeric(
+  #     all(m_hat.eval + half_width >= m.eval) &&
+  #       all(m_hat.eval - half_width <= m.eval)
+  #   )
+  #   volume[i] = 2 * mean(half_width)
+  # }
+  # 
+  # return(c(flag, volume))
+  
+  flag_full = rep(0, length(alpha))
+  volume_full = rep(0, length(alpha))
+  
+  flag_interior = rep(0, length(alpha))
+  volume_interior = rep(0, length(alpha))
+  
+  
+  sd_surface = matrix(diag_sd, N0, N0, byrow = TRUE)
+  
+  
+  ####################################################
+  # h and interior index [h,1-h] x [0,1]
+  ####################################################
+  round_up_2 <- function(x) {
+    ceiling(x * 100) / 100
   }
-  return(flag)
+  h = round_up_2(n^(-1/6))
+  
+  time_grid = seq(1/N0, 1, length.out = N0)
+  
+  interior_index = which(
+    time_grid >= h &
+      time_grid <= 1-h
+  )
+  
+  
+  ####################################################
+  # Evaluate SCR
+  ####################################################
+  
+  for(i in 1:length(alpha)){
+    
+    half_width = Q[i] * sd_surface / sqrt(n)
+    
+    
+    #############################
+    # Full domain [0,1]^2
+    #############################
+    
+    flag_full[i] = as.numeric(
+      all(m_hat.eval + half_width >= m.eval) &&
+        all(m_hat.eval - half_width <= m.eval)
+    )
+    
+    volume_full[i] = 2 * mean(half_width)
+    
+    
+    
+    #############################
+    # Interior domain [h,1-h]x[0,1]
+    #############################
+    
+    m_hat_interior =
+      m_hat.eval[interior_index,,drop=FALSE]
+    
+    m_real_interior =
+      m.eval[interior_index,,drop=FALSE]
+    
+    half_width_interior =
+      half_width[interior_index,,drop=FALSE]
+    
+    
+    flag_interior[i] = as.numeric(
+      all(m_hat_interior + half_width_interior >= m_real_interior) &&
+        all(m_hat_interior - half_width_interior <= m_real_interior)
+    )
+    
+    
+    # volume integral over [h,1-h]x[0,1]
+    # multiply by domain length (1-2h)
+    volume_interior[i] =
+      2 * mean(half_width_interior) * (1-2*h)
+    
+  }
+  
+  
+  return(
+    c(
+      flag_full,
+      volume_full,
+      flag_interior,
+      volume_interior
+    )
+  )
  
 }
 

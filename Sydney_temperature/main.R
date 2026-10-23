@@ -111,36 +111,257 @@ Our_bootstrap = mvrnorm(1000,rep(0,ncol(Sigma)),Sigma)
 Our_result = B.eval%*%t(Our_bootstrap)/diag_sd
 alpha = 0.05
 Q = quantile(apply(abs(Our_result),2,max),1-alpha);Q
-
+adjustfactor = 1+20/n
 persp3d(m_hat.eval,zlim=c(10,40), col = "red", shade = 0.5)
-persp3d(m_hat.eval+Q*matrix(diag_sd,n,N,T)/sqrt(n ) ,zlim=c(10,40),shade = 0.5)
-persp3d(m_hat.eval-Q*matrix(diag_sd,n,N,T)/sqrt(n ) ,zlim=c(10,40), shade = 0.5)
+persp3d(m_hat.eval+adjustfactor*Q*matrix(diag_sd,n,N,T)/sqrt(n ) ,zlim=c(10,40),shade = 0.5)
+persp3d(m_hat.eval-adjustfactor*Q*matrix(diag_sd,n,N,T)/sqrt(n ) ,zlim=c(10,40), shade = 0.5)
 
 write.csv(m_hat.eval,'z1.csv')
-write.csv(m_hat.eval+Q*matrix(diag_sd,n,N,T)/sqrt(n ),'z2.csv')
-write.csv(m_hat.eval-Q*matrix(diag_sd,n,N,T)/sqrt(n ),'z3.csv')
+write.csv(m_hat.eval+adjustfactor*Q*matrix(diag_sd,n,N,T)/sqrt(n ),'z2.csv')
+write.csv(m_hat.eval-adjustfactor*Q*matrix(diag_sd,n,N,T)/sqrt(n ),'z3.csv')
 
-alpha = 0.01
-Q = quantile(apply(abs(Our_result),2,max),1-alpha);Q
-
-persp3d(m_hat.eval,zlim=c(10,40), col = "red", shade = 0.5)
-persp3d(m_hat.eval+Q*matrix(diag_sd,n,N,T)/sqrt(n ) ,zlim=c(10,40),shade = 0.5)
-persp3d(m_hat.eval-Q*matrix(diag_sd,n,N,T)/sqrt(n ) ,zlim=c(10,40), shade = 0.5)
-
-write.csv(m_hat.eval,'z1.csv')
-write.csv(m_hat.eval+Q*matrix(diag_sd,n,N,T)/sqrt(n ),'z22.csv')
-write.csv(m_hat.eval-Q*matrix(diag_sd,n,N,T)/sqrt(n ),'z33.csv')
+# alpha = 0.01
+# Q = quantile(apply(abs(Our_result),2,max),1-alpha);Q
+# 
+# persp3d(m_hat.eval,zlim=c(10,40), col = "red", shade = 0.5)
+# persp3d(m_hat.eval+Q*matrix(diag_sd,n,N,T)/sqrt(n ) ,zlim=c(10,40),shade = 0.5)
+# persp3d(m_hat.eval-Q*matrix(diag_sd,n,N,T)/sqrt(n ) ,zlim=c(10,40), shade = 0.5)
+# 
+# write.csv(m_hat.eval,'z1.csv')
+# write.csv(m_hat.eval+Q*matrix(diag_sd,n,N,T)/sqrt(n ),'z22.csv')
+# write.csv(m_hat.eval-Q*matrix(diag_sd,n,N,T)/sqrt(n ),'z33.csv')
 
 
 
 ################# 
-m_tilde = B_N%*%solve(t(B_N)%*%B_N)%*%t(B_N)%*%colMeans(Y)
-m0 = matrix(rep(m_tilde,50),nrow=50,byrow = T)
-write.csv(m0,'z4.csv')
-persp3d(m0 ,zlim=c(10,40), col = 'red')
+# m_tilde = B_N%*%solve(t(B_N)%*%B_N)%*%t(B_N)%*%colMeans(Y)
+# m0 = matrix(rep(m_tilde,50),nrow=50,byrow = T)
+# write.csv(m0,'z4.csv')
+# persp3d(m0 ,zlim=c(10,40), col = 'red')
+
+############################################################
+# Corrected time-invariance test based on Appendix F
+############################################################
+
+# Number of Gaussian simulations
+B_boot = 5000
+set.seed(123)
+
+
+############################################################
+# Step 1: estimate the unknown time-invariant mean m_0(x)
+#
+# Appendix F:
+#   m_hat_0(x) = T^{-1} sum_t eta_hat_t(x)
+#
+# By linearity of the spline smoother this is identical to
+# smoothing the cross-sectional average observations.
+############################################################
+
+m0_vec =
+  B_N %*%
+  solve(t(B_N) %*% B_N) %*%
+  t(B_N) %*%
+  colMeans(Y)
+
+m0_vec = as.vector(m0_vec)
+
+# Create the time-invariant surface
+m0 =
+  matrix(
+    rep(m0_vec, n),
+    nrow = n,
+    ncol = N,
+    byrow = TRUE
+  )
+
+
+############################################################
+# Optional numerical check:
+#
+# Appendix F shows that m_hat_0(x) also equals
+# T^{-1} sum_t m_hat(t/T,x)
+############################################################
+
+cat(
+  "Difference between the two representations of m0:",
+  max(abs(m0_vec - colMeans(m_hat))),
+  "\n"
+)
+
+
+############################################################
+# Step 2: centered temporal B-spline basis
+#
+# B_T^c(tau) = B_T(tau) - bar{B}_T
+#
+# bar{B}_T = T^{-1} sum_t B_T(t/T)
+############################################################
+
+B_T_bar = colMeans(B_T)
+
+B_T_center =
+  sweep(
+    B_T,
+    MARGIN = 2,
+    STATS = B_T_bar,
+    FUN = "-"
+  )
+
+
+############################################################
+# Tensor-product centered basis
+#
+# This generates the covariance structure of
+#
+#   Z_tilde_T(tau,x)
+#     = Z_T(tau,x)
+#       - T^{-1} sum_t Z_T(t/T,x)
+############################################################
+
+B_center =
+  kronecker(
+    B_T_center,
+    B_N
+  )
+
+
+############################################################
+# Step 3: estimated variance of the centered Gaussian process
+#
+# Sigma has already been constructed above as
+#
+#   solve(V_T) \otimes Gamma_hat
+#
+# Do NOT form
+# B_center %*% Sigma %*% t(B_center)
+# explicitly, since this is a huge matrix.
+############################################################
+
+B_center_Sigma =
+  B_center %*% Sigma
+
+diag_var_center =
+  rowSums(
+    B_center_Sigma * B_center
+  )
+
+# Protect against tiny negative values caused by numerical precision
+diag_var_center =
+  pmax(diag_var_center, 0)
+
+diag_sd_center =
+  sqrt(diag_var_center)
+
+cat(
+  "Minimum centered SD:",
+  min(diag_sd_center),
+  "\n"
+)
+
+
+############################################################
+# Step 4: observed corrected test statistic
+#
+# With the normalization in the current code,
+#
+# diag_sd_center / sqrt(n)
+#
+# is the standard error of
+# m_hat(tau,x) - m_hat_0(x).
+############################################################
+
+difference_surface =
+  m_hat - m0
+
+difference_vec =
+  c(t(difference_surface))
+
+se_center_vec =
+  diag_sd_center / sqrt(n)
+
+test_stat =
+  max(
+    abs(difference_vec / se_center_vec)
+  )
+
+cat(
+  "Corrected time-invariance test statistic:",
+  test_stat,
+  "\n"
+)
+
+
+############################################################
+# Step 5: simulate the centered Gaussian process
+############################################################
+
+Gaussian_coef =
+  mvrnorm(
+    B_boot,
+    mu = rep(0, ncol(Sigma)),
+    Sigma = Sigma
+  )
+
+# Each column is one simulated centered Gaussian surface
+Z_center =
+  B_center %*% t(Gaussian_coef)
+
+# Studentize pointwise
+Z_center_std =
+  sweep(
+    Z_center,
+    MARGIN = 1,
+    STATS = diag_sd_center,
+    FUN = "/"
+  )
+
+# Supremum statistic for each Gaussian replication
+bootstrap_stat =
+  apply(
+    abs(Z_center_std),
+    2,
+    max
+  )
+
+
+############################################################
+# Step 6: critical values and Monte Carlo p-value
+############################################################
+
+Q_90 = as.numeric(quantile(bootstrap_stat, 0.90))
+Q_95 = as.numeric(quantile(bootstrap_stat, 0.95))
+Q_99 = as.numeric(quantile(bootstrap_stat, 0.99))
+
+
+cat("\n")
+cat("Corrected time-invariance test\n")
+cat("------------------------------------\n")
+cat("Test statistic =", test_stat, "\n")
+cat("90% critical value =", Q_90, "\n")
+cat("95% critical value =", Q_95, "\n")
+cat("99% critical value =", Q_99, "\n")
+cat("adjusted 99% critical value =", adjustfactor*Q_99, "\n")
+cat("------------------------------------\n")
+
+cat(
+  "Reject at 5% level:",
+  test_stat > Q_95,
+  "\n"
+)
+
+cat(
+  "Reject at 1% level:",
+  test_stat > Q_99,
+  "\n"
+)
+
+#################################
 
 source("Wu.R")
 result_kernel = Wu(Y,n,N,alpha=0.05)
+result_kernel$h
+
 persp3d(result_kernel$m_hat,zlim=c(10,40), col = "red", shade = 0.5)
 persp3d(result_kernel$upper ,zlim=c(10,40),shade = 0.5)
 persp3d(result_kernel$lower ,zlim=c(10,40), shade = 0.5)
@@ -149,3 +370,4 @@ write.csv(result_kernel$m_hat,'wu1.csv')
 write.csv(result_kernel$upper,'wu2.csv')
 write.csv(result_kernel$lower,'wu3.csv')
  
+

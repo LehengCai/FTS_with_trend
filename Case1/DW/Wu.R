@@ -553,7 +553,7 @@ round_up_2 <- function(x) {
 }
                    
 Wu = function(Y,n,N,alpha=c(0.01,0.05,0.1,0.2),
-                B_error=0.15,boots=500,#B_error=0.15,boots=1000
+                B_error=0.15,boots=500,
               Mseq=seq(15,30,by=1), band.choose='F',bseq=seq(0.1,0.3,by=0.02)){
   
   DAnorm=matrix(0,nrow=length(bseq), ncol=n)
@@ -570,10 +570,10 @@ Wu = function(Y,n,N,alpha=c(0.01,0.05,0.1,0.2),
     berror=bseq[order(GCV)[1]]
     bb=berror
   }else{
-    #berror=B_error
-    #bb=berror
-    berror=round_up_2(0.6*n^(-1/5))
-    bb=round_up_2(0.6*n^(-1/5))
+    # berror=round_up_2(0.6*n^(-1/5)) 0.75*n^(-1/8)
+    # bb=round_up_2(0.6*n^(-1/5)) n^(-1/6) 0.85*n^(-1/7)
+    berror=round_up_2(n^(-1/6)) 
+    bb=round_up_2(n^(-1/6)) 
   }
   
   Estimat_FDA=matrix(0,nrow=n,ncol=N)
@@ -592,33 +592,91 @@ Wu = function(Y,n,N,alpha=c(0.01,0.05,0.1,0.2),
   m.eval <- t(sapply(1:n, function(j) m_real + time_varying[j,]))
  
   
-  # max_dev=max(abs((Estimat_FDA[(ceiling(bb*n)):(n-ceiling(bb*n)),]-
-  #                    m.eval[(ceiling(bb*n)): (n-ceiling(bb*n)),])/
-  #                   Estimat_Lrv[(ceiling(bb*n)):(n-ceiling(bb*n)),]))*sqrt(bb*n)/sqrt(2)
+  # max_dev=max(abs((Estimat_FDA - m.eval )/
+  #                   Estimat_Lrv ))*sqrt(bb*n)/sqrt(2)
+  # 
+  # Residual_Matrix=Y-Estimat_FDA
+  # Matrix_SCB=SCB_matrix(Residual_Matrix/Estimat_Lrv,b=bb)
+  # mm = 30
+  # # mm=M_select(y_matrix= Matrix_SCB, Mseq=Mseq,rep_time=N)
+  # Critical=HDtest((Matrix_SCB),m=mm,lit=boots,rep_time =N)
+  # return(c(max_dev<quantile(Critical,1-alpha)))
   
-  max_dev=max(abs((Estimat_FDA - m.eval )/
-                    Estimat_Lrv ))*sqrt(bb*n)/sqrt(2)
+  ############################################################
+  # Critical values
+  ############################################################
+  Residual_Matrix = Y - Estimat_FDA
+  Matrix_SCB = SCB_matrix(Residual_Matrix / Estimat_Lrv, b = bb)
   
-  Residual_Matrix=Y-Estimat_FDA
-  Matrix_SCB=SCB_matrix(Residual_Matrix/Estimat_Lrv,b=bb)
   mm = 30
-  # mm=M_select(y_matrix= Matrix_SCB, Mseq=Mseq,rep_time=N)
-  Critical=HDtest((Matrix_SCB),m=mm,lit=boots,rep_time =N)
- 
-  # return(mean(quantile(Critical,0.95)*Estimat_Lrv[(ceiling(bb*n)):(n-ceiling(bb*n)),]*sqrt(2/(bb*n))))
-  # max_dev1=max(abs(Estimat_FDA[1: (ceiling(bb*n)-1),]-m.eval[1: (ceiling(bb*n)-1),])/Estimat_Lrv[1: (ceiling(bb*n)-1),])
-  # max_dev2=max(abs(Estimat_FDA[ (n-ceiling(bb*n)+1):n,]-m.eval[(n-ceiling(bb*n)+1):n,])/Estimat_Lrv[(n-ceiling(bb*n)+1):n,])
-  # max_dev3=max(max_dev1,max_dev2)
-  # Matrix_SCB_boundary=SCB_matrix_boundary(Residual_Matrix/Estimat_Lrv,b=bb)
-  # HD1=HDtest( Matrix_SCB_boundary$Matrix_SCB_left,m=mm,lit=boots,rep_time =N)
-  # HD2=HDtest( Matrix_SCB_boundary$Matrix_SCB_right,m=mm,lit=boots,rep_time =N)
-  # Critical1=HD1*sqrt(n*bb)
-  # Critical2=HD2*sqrt(n*bb)
-  # Critical3=colMaxs(rbind(Critical1,Critical2))
+  Critical = HDtest(Matrix_SCB, m = mm, lit = boots, rep_time = N)
   
-  return(c(max_dev<quantile(Critical,1-alpha)))
-  #return(c(max_dev<quantile(Critical,1-alpha)) & c(max_dev3<quantile(Critical3,1-alpha)) )
+  Q = as.numeric(
+    quantile(Critical, probs = 1 - alpha, names = FALSE)
+  )
   
+  ############################################################
+  # Full domain [0,1]^2
+  ############################################################
+  
+  # standardized maximal deviation over [0,1]^2
+  max_dev_full =
+    max(abs((Estimat_FDA - m.eval) / Estimat_Lrv)) *
+    sqrt(bb * n) / sqrt(2)
+  
+  coverage_full = as.numeric(max_dev_full < Q)
+  
+  # Half-width of the SCR at every grid point:
+  # Q * Estimat_Lrv * sqrt(2 / (n * h)), where h = bb
+  #
+  # For each alpha, the volume is
+  # integral_[0,1]^2 (Upper - Lower) d tau d x.
+  volume_full = sapply(Q, function(q) {
+    width_matrix =
+      2 * q * Estimat_Lrv * sqrt(2 / (bb * n))
+    
+    # area([0,1]^2) = 1
+    mean(width_matrix)
+  })
+  
+  ############################################################
+  # Interior domain [h,1-h] x [0,1]
+  ############################################################
+  
+  # This is the same interior grid used by SCB_matrix()
+  left_index  = ceiling(bb * n)
+  right_index = n - ceiling(bb * n)
+  
+  interior_index = left_index:right_index
+  
+  max_dev_interior =
+    max(
+      abs(
+        (Estimat_FDA[interior_index, , drop = FALSE] -
+           m.eval[interior_index, , drop = FALSE]) /
+          Estimat_Lrv[interior_index, , drop = FALSE]
+      )
+    ) * sqrt(bb * n) / sqrt(2)
+  
+  coverage_interior = as.numeric(max_dev_interior < Q)
+  
+  # Volume over [h,1-h] x [0,1].
+  # Its area is 1 - 2h = 1 - 2*bb.
+  volume_interior = sapply(Q, function(q) {
+    width_matrix =
+      2 * q *
+      Estimat_Lrv[interior_index, , drop = FALSE] *
+      sqrt(2 / (bb * n))
+    
+    mean(width_matrix) * (1 - 2 * bb)
+  })
+  
+  return(c(
+    coverage_full,
+    volume_full,
+    coverage_interior,
+    volume_interior
+  ))
 }
 #Wu(Y,n,N)
 

@@ -21,9 +21,43 @@ f = function(n){
   N = 100
   type = "MA"  
   Data = Gen_determinData(N)
-  result = matrix(rowMeans(sapply(1:MCMC,test,N = N,n = n, 
-                          alpha = alpha,Data = Data, type = type,  x0=x0),na.rm = T),
-                  ncol=2*length(alpha),byrow =T) 
+  raw_result = sapply(
+    1:MCMC,
+    test,
+    N = N,
+    n = n,
+    alpha = alpha,
+    Data = Data,
+    type = type,
+    x0 = x0
+  )
+  
+  avg_result = rowMeans(
+    raw_result,
+    na.rm = TRUE
+  )
+  
+  result = matrix(
+    avg_result,
+    nrow = 6,
+    ncol = 3 * length(alpha),
+    byrow = TRUE
+  )
+  
+  rownames(result) = c(
+    "Homo_Normal",
+    "Homo_Uniform",
+    "Homo_Laplace",
+    "Hetero_Normal",
+    "Hetero_Uniform",
+    "Hetero_Laplace"
+  )
+  
+  colnames(result) = c(
+    paste0("Coverage_full_alpha_", alpha),
+    paste0("Coverage_interior_alpha_", alpha),
+    paste0("Average_width_alpha_", alpha)
+  )
   cat('n:',n,'N:',N,'---',result)
   write.csv(result,file=str_c('result/T=',n,'N=',N,'x0=',x0,'.csv'))
 }

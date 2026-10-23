@@ -25,7 +25,8 @@ test = function(xxx, N ,n , alpha,Data,type){
       X <- matrix(0,n,k)
       X[1,] <- rnorm(k)
       for (t in 2:n) {
-        X[t,] <- -1/sqrt(2) * X[t - 1,] + zeta[t,]/sqrt(2)
+        # X[t,] <- -1/sqrt(2) * X[t - 1,] + zeta[t,]/sqrt(2)
+        X[t,] <- 1/5 * X[t - 1,] + sqrt(24)/5 * zeta[t,]
       }
       return(X)
     })

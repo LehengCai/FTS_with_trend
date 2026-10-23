@@ -554,7 +554,7 @@ round_up_2 <- function(x) {
                    
 Wu = function(Y,n,N,alpha=c(0.01,0.05,0.1,0.2),
                 B_error=0.15,boots=500,#B_error=0.15,boots=1000
-              Mseq=seq(15,30,by=1), band.choose='F',bseq=seq(0.1,0.3,by=0.02)){
+              Mseq=seq(15,30,by=1), band.choose='T',bseq=seq(0.1,0.3,by=0.02)){
   
   DAnorm=matrix(0,nrow=length(bseq), ncol=n)
   
@@ -603,7 +603,8 @@ Wu = function(Y,n,N,alpha=c(0.01,0.05,0.1,0.2),
   # Critical2=HD2*sqrt(n*bb)
   # Critical3=colMaxs(rbind(Critical1,Critical2))
   return(list(m_hat = Estimat_FDA,upper = Estimat_FDA+Q*Estimat_Lrv*sqrt(2)/sqrt(bb*n),
-              lower = Estimat_FDA-Q*Estimat_Lrv*sqrt(2)/sqrt(bb*n)))
+              lower = Estimat_FDA-Q*Estimat_Lrv*sqrt(2)/sqrt(bb*n),
+              h = bb))
 
   #return(c(max_dev<quantile(Critical,1-alpha)) & c(max_dev3<quantile(Critical3,1-alpha)) )
   
